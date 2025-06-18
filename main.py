@@ -99,6 +99,8 @@ def law():
 
 # ============== أوامر التليجرام ==============
 
+# كل دوال التليجرام أصبحت async
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id == GROUP_ID:
         await update.message.reply_text('مرحباً بكم في بوت تفاعل SM 1%! استخدم /top لرؤية الأكثر تفاعلاً')
@@ -113,7 +115,6 @@ async def track_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect('interactions.db')
     cursor = conn.cursor()
 
-    # إدخال أو تحديث بيانات المستخدم
     cursor.execute('''
     INSERT OR IGNORE INTO users (user_id, username, first_name, last_name, message_count, last_interaction)
     VALUES (?, ?, ?, ?, 0, ?)
@@ -151,8 +152,8 @@ async def top_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = f"@{username}" if username else f"{first_name} {last_name}".strip()
         response += f"{i}. {name} - {count} رسالة\n"
 
-    conn.close()
     await update.message.reply_text(response)
+    conn.close()
 
 async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
@@ -162,7 +163,6 @@ async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     conn = sqlite3.connect('interactions.db')
     cursor = conn.cursor()
 
-    # الحصول على عدد رسائل المستخدم
     cursor.execute('SELECT message_count FROM users WHERE user_id = ?', (user.id,))
     user_data = cursor.fetchone()
 
@@ -171,7 +171,6 @@ async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    # الحصول على ترتيب المستخدم
     cursor.execute('''
     SELECT COUNT(*) FROM users 
     WHERE message_count > ?
@@ -190,7 +189,7 @@ async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(response)
 
-# ============== تشغيل الخادم ==============
+# ============== تشغيل الخادم والبوت ==============
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -202,15 +201,15 @@ async def run_bot():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("top", top_members))
     application.add_handler(CommandHandler("my", my_rank))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_message))
+    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), track_message))
 
     await application.run_polling()
 
 if __name__ == '__main__':
-    # تشغيل Flask في thread منفصل
+    # تشغيل Flask في Thread منفصل
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # تشغيل بوت التليجرام (asyncio)
+    # تشغيل بوت التليجرام باستخدام asyncio
     asyncio.run(run_bot())
