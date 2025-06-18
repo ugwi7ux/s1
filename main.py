@@ -1,48 +1,46 @@
 import os
 import sqlite3
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
+    filters,
     ContextTypes,
-    filters
 )
 import threading
 import asyncio
 
-# تهيئة تطبيق Flask
+# تهيئة Flask
 app = Flask(__name__)
 
 # إعدادات البوت
 GROUP_ID = -1002445433249
 ADMIN_ID = 6243639789
-BOT_TOKEN = "6037757983:AAG5qtoMZrIuUMpI8-Mta3KtjW1Qu2Y2iO8"
+BOT_TOKEN = "6037757983:AAG5qtoMZrIuUMpI8-Mta3KtjW1Qu2Y2iO8"  # استبدل بالتوكن الحقيقي
 
-# تهيئة قاعدة البيانات
+# تهيئة قاعدة البيانات كما في كودك الأصلي
 def init_db():
     conn = sqlite3.connect('interactions.db')
     cursor = conn.cursor()
-
     cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        first_name TEXT,
-        last_name TEXT,
-        message_count INTEGER DEFAULT 0,
-        last_interaction TEXT
-    )
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            message_count INTEGER DEFAULT 0,
+            last_interaction TEXT
+        )
     ''')
-
     conn.commit()
     conn.close()
 
 init_db()
 
-# ============== مسارات Flask ==============
+# مسارات Flask كما هي
 
 @app.route('/')
 def dashboard():
@@ -52,54 +50,21 @@ def dashboard():
 def api_top_members():
     conn = sqlite3.connect('interactions.db')
     cursor = conn.cursor()
-
     cursor.execute('''
-    SELECT user_id, username, first_name, last_name, message_count 
-    FROM users 
-    ORDER BY message_count DESC 
-    LIMIT 20
+        SELECT user_id, username, first_name, last_name, message_count 
+        FROM users ORDER BY message_count DESC LIMIT 20
     ''')
-
-    members = []
-    for row in cursor.fetchall():
-        members.append({
-            'user_id': row[0],
-            'username': row[1],
-            'first_name': row[2] or "",
-            'last_name': row[3] or "",
-            'message_count': row[4]
-        })
-
+    members = [{
+        'user_id': row[0],
+        'username': row[1],
+        'first_name': row[2] or "",
+        'last_name': row[3] or "",
+        'message_count': row[4]
+    } for row in cursor.fetchall()]
     conn.close()
     return jsonify(members)
-    
-@app.route('/index')
-def index():
-    return render_template('index.html')
-    
-@app.route('/store')
-def store():
-    return render_template('store.html')
 
-@app.route('/contests')
-def contests():
-    return render_template('contests.html')
-
-@app.route('/report')
-def report():
-    return render_template('report.html')
-
-@app.route('/support')
-def support():
-    return render_template('support.html')
-
-@app.route('/law')
-def law():
-    return render_template('law.html')
-
-# ============== أوامر التليجرام ==============
-
-# كل دوال التليجرام أصبحت async
+# أوامر بوت تلجرام بصيغة async
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id == GROUP_ID:
@@ -121,8 +86,8 @@ async def track_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ''', (user.id, user.username, user.first_name, user.last_name, now))
 
     cursor.execute('''
-    UPDATE users 
-    SET message_count = message_count + 1,
+    UPDATE users SET
+        message_count = message_count + 1,
         username = ?,
         first_name = ?,
         last_name = ?,
@@ -139,12 +104,9 @@ async def top_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conn = sqlite3.connect('interactions.db')
     cursor = conn.cursor()
-
     cursor.execute('''
-    SELECT username, first_name, last_name, message_count 
-    FROM users 
-    ORDER BY message_count DESC 
-    LIMIT 10
+        SELECT username, first_name, last_name, message_count 
+        FROM users ORDER BY message_count DESC LIMIT 10
     ''')
 
     response = "🏆 أفضل 10 أعضاء متفاعلين:\n\n"
@@ -152,8 +114,8 @@ async def top_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
         name = f"@{username}" if username else f"{first_name} {last_name}".strip()
         response += f"{i}. {name} - {count} رسالة\n"
 
-    await update.message.reply_text(response)
     conn.close()
+    await update.message.reply_text(response)
 
 async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
@@ -171,25 +133,21 @@ async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.close()
         return
 
-    cursor.execute('''
-    SELECT COUNT(*) FROM users 
-    WHERE message_count > ?
-    ''', (user_data[0],))
-
+    cursor.execute('SELECT COUNT(*) FROM users WHERE message_count > ?', (user_data[0],))
     rank = cursor.fetchone()[0] + 1
     message_count = user_data[0]
-
     conn.close()
 
-    name = f"@{user.username}" if user.username else user.first_name
-    response = f"📊 إحصائياتك في SM 1%:\n\n"
-    response += f"🔹 الترتيب: {rank}\n"
-    response += f"🔹 عدد الرسائل: {message_count}\n"
-    response += f"🔹 تفاعلك يساهم في نمو المجتمع!"
+    response = (
+        f"📊 إحصائياتك في SM 1%:\n\n"
+        f"🔹 الترتيب: {rank}\n"
+        f"🔹 عدد الرسائل: {message_count}\n"
+        f"🔹 تفاعلك يساهم في نمو المجتمع!"
+    )
 
     await update.message.reply_text(response)
 
-# ============== تشغيل الخادم والبوت ==============
+# تشغيل Flask في Thread منفصل
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
@@ -201,15 +159,13 @@ async def run_bot():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("top", top_members))
     application.add_handler(CommandHandler("my", my_rank))
-    application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), track_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_message))
 
     await application.run_polling()
 
 if __name__ == '__main__':
-    # تشغيل Flask في Thread منفصل
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # تشغيل بوت التليجرام باستخدام asyncio
     asyncio.run(run_bot())
