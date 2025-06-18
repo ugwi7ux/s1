@@ -3,8 +3,15 @@ import sqlite3
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 import threading
+import asyncio
 
 # تهيئة تطبيق Flask
 app = Flask(__name__)
@@ -92,11 +99,11 @@ def law():
 
 # ============== أوامر التليجرام ==============
 
-def start(update: Update, context: CallbackContext):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id == GROUP_ID:
-        update.message.reply_text('مرحباً بكم في بوت تفاعل SM 1%! استخدم /top لرؤية الأكثر تفاعلاً')
+        await update.message.reply_text('مرحباً بكم في بوت تفاعل SM 1%! استخدم /top لرؤية الأكثر تفاعلاً')
 
-def track_message(update: Update, context: CallbackContext):
+async def track_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
         return
 
@@ -125,7 +132,7 @@ def track_message(update: Update, context: CallbackContext):
     conn.commit()
     conn.close()
 
-def top_members(update: Update, context: CallbackContext):
+async def top_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
         return
 
@@ -144,10 +151,10 @@ def top_members(update: Update, context: CallbackContext):
         name = f"@{username}" if username else f"{first_name} {last_name}".strip()
         response += f"{i}. {name} - {count} رسالة\n"
 
-    update.message.reply_text(response)
+    await update.message.reply_text(response)
     conn.close()
 
-def my_rank(update: Update, context: CallbackContext):
+async def my_rank(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
         return
 
@@ -160,7 +167,7 @@ def my_rank(update: Update, context: CallbackContext):
     user_data = cursor.fetchone()
 
     if not user_data:
-        update.message.reply_text("لم يتم العثور على بيانات تفاعل لك.")
+        await update.message.reply_text("لم يتم العثور على بيانات تفاعل لك.")
         conn.close()
         return
 
@@ -181,32 +188,27 @@ def my_rank(update: Update, context: CallbackContext):
     response += f"🔹 عدد الرسائل: {message_count}\n"
     response += f"🔹 تفاعلك يساهم في نمو المجتمع!"
 
-    update.message.reply_text(response)
+    await update.message.reply_text(response)
 
 # ============== تشغيل الخادم ==============
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 
-def run_bot():
+async def run_bot():
     init_db()
-    updater = Updater(BOT_TOKEN)
-    dp = updater.dispatcher
+    application = ApplicationBuilder().token(BOT_TOKEN).build()
 
-    # إضافة معالجات الأوامر
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("top", top_members))
-    dp.add_handler(CommandHandler("my", my_rank))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, track_message))
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("top", top_members))
+    application.add_handler(CommandHandler("my", my_rank))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, track_message))
 
-    updater.start_polling()
-    updater.idle()
+    await application.run_polling()
 
 if __name__ == '__main__':
-    # تشغيل Flask في thread منفصل
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
 
-    # تشغيل بوت التليجرام
-    run_bot()
+    asyncio.run(run_bot())
